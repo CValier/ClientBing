@@ -111,7 +111,7 @@ func (c *ReportingService) PollReport(id string) (string, error) {
 }
 
 // GetAdGroupPerformanceReport returns the AdGroup report with the specified columns and daterange.
-func (c *ReportingService) GetAdGroupPerformanceReport(aggregation string, columns []string, requestTime *RequestTime) ([]*AdGroupPerformanceReportColumns, error) {
+func (c *ReportingService) GetAdGroupPerformanceReport(aggregation string, columns []string, requestTime *RequestTime) ([]*AdGroupPerformanceReportColumns, error, []string, [][]string) {
 
 	// Parsing data to use it in report request
 	accountId, _ := strconv.ParseInt(c.Session.AccountId, 10, 64)
@@ -134,17 +134,17 @@ func (c *ReportingService) GetAdGroupPerformanceReport(aggregation string, colum
 	}
 
 	// Generate performance report
-	report, err := c.GetPerformanceReport(rr)
+	report, err, cols, rows := c.GetPerformanceReport(rr)
 	if err != nil {
-		return nil, err
+		return nil, err, nil, nil
 	}
 
 	// convert map to adGroup report.
-	return GetAdGroupReport(report), nil
+	return GetAdGroupReport(report), nil, cols, rows
 }
 
 // GetCampaignPerformanceReport returns a campaign report with the specified columns and daterange.
-func (c *ReportingService) GetCampaignPerformanceReport(aggregation string, columns []string, requestTime *RequestTime) ([]*CampaignPerformanceReportColumns, error) {
+func (c *ReportingService) GetCampaignPerformanceReport(aggregation string, columns []string, requestTime *RequestTime) ([]*CampaignPerformanceReportColumns, error, []string, [][]string) {
 
 	// Parsing data to use it in report request
 	accountId, _ := strconv.ParseInt(c.Session.AccountId, 10, 64)
@@ -167,17 +167,17 @@ func (c *ReportingService) GetCampaignPerformanceReport(aggregation string, colu
 	}
 
 	// Generate performance report
-	report, err := c.GetPerformanceReport(rr)
+	report, err, cols, rows := c.GetPerformanceReport(rr)
 	if err != nil {
-		return nil, err
+		return nil, err, nil, nil
 	}
 
 	// convert map to Campaign report.
-	return GetCampaignReport(report), nil
+	return GetCampaignReport(report), nil, cols, rows
 }
 
 // GetAccountPerformanceReport returns the account report with the specified columns and daterange.
-func (c *ReportingService) GetAccountPerformanceReport(aggregation string, columns []string, requestTime *RequestTime) ([]*AccountPerformanceReportColumns, error) {
+func (c *ReportingService) GetAccountPerformanceReport(aggregation string, columns []string, requestTime *RequestTime) ([]*AccountPerformanceReportColumns, error, []string, [][]string) {
 
 	// Parsing data to use it in report request
 	accountId, _ := strconv.ParseInt(c.Session.AccountId, 10, 64)
@@ -200,73 +200,73 @@ func (c *ReportingService) GetAccountPerformanceReport(aggregation string, colum
 	}
 
 	// Generate performance report
-	report, err := c.GetPerformanceReport(rr)
+	report, err, cols, rows := c.GetPerformanceReport(rr)
 	if err != nil {
-		return nil, err
+		return nil, err, nil, nil
 	}
 
 	// convert map to Account report.
-	return GetAccountReport(report), nil
+	return GetAccountReport(report), nil, cols, rows
 }
 
 // getPerformanceReport submits the report request, polls it and returns the report as a map
-func (c *ReportingService) GetPerformanceReport(rr interface{}) ([]*ReportRecord, error) {
+func (c *ReportingService) GetPerformanceReport(rr interface{}) ([]*ReportRecord, error, []string, [][]string) {
 	// Submit the report and generate a report id.
 	id, err := c.SubmitReportRequest(rr)
 	if err != nil {
-		return nil, errors.New("Error submiting the report: " + err.Error())
+		return nil, errors.New("Error submiting the report: " + err.Error()), nil, nil
 	}
 
 	// Poll the report and get the url.
 	url, err := c.PollReport(id)
 	if err != nil {
-		return nil, errors.New("Error polling the report: " + err.Error())
+		return nil, errors.New("Error polling the report: " + err.Error()), nil, nil
 	}
 
 	// Use the url to generate a map with the report.
-	report, err := GetReportMap(url)
+	report, err, cols, rows := c.GetReportMap(url)
 	if err != nil {
-		return nil, errors.New("Error getting report map: " + err.Error())
+		return nil, errors.New("Error getting report map: " + err.Error()), nil, nil
 	}
-	return report, nil
+	return report, nil, cols, rows
 }
 
 // GetReportMap downloads the report, reads the csv file and returns a map with the report metrics.
-func GetReportMap(url string) ([]*ReportRecord, error) {
+func (c *ReportingService) GetReportMap(url string) ([]*ReportRecord, error, []string, [][]string) {
 	//Verifying url is not empty
 	if url == "" {
-		return nil, errors.New("Empty Url Report, unable to find data for that period.")
+		return nil, errors.New("Empty Url Report, unable to find data for that period."), nil, nil
 	}
 
 	// Download ZIP file from the url
 	res, err := http.DefaultClient.Get(url)
 	if err != nil {
-		return nil, errors.New("Error downloading report zip file: " + err.Error())
+		return nil, errors.New("Error downloading report zip file: " + err.Error()), nil, nil
 	}
 
 	// Opening body of the response
 	defer res.Body.Close()
 	b, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return nil, errors.New("Error opening the zip file response: " + err.Error())
+		return nil, errors.New("Error opening the zip file response: " + err.Error()), nil, nil
 	}
 
 	// Read the zip file and extract the csv file
 	breader := bytes.NewReader(b)
 	reader, err := zip.NewReader(breader, breader.Size())
 	if err != nil {
-		return nil, errors.New("Error reading the zip file: " + err.Error())
+		return nil, errors.New("Error reading the zip file: " + err.Error()), nil, nil
 	}
 
 	// Verify that exists 1 csv file
 	if len(reader.File) != 1 {
-		return nil, fmt.Errorf("Error reading csv file, expected 1 file, got: %d", len(reader.File))
+		return nil, fmt.Errorf("Error reading csv file, expected 1 file, got: %d", len(reader.File)), nil, nil
 	}
 
 	// Open the csv file.
 	f, err := reader.File[0].Open()
 	if err != nil {
-		return nil, errors.New("Error reading the csv file: " + err.Error())
+		return nil, errors.New("Error reading the csv file: " + err.Error()), nil, nil
 	}
 
 	// Reading the csv file
@@ -276,24 +276,27 @@ func GetReportMap(url string) ([]*ReportRecord, error) {
 	// Reading the first line to extract columns.
 	line, _, err := br.ReadLine()
 	if err != nil {
-		return nil, errors.New("Error reading the csv report columns: " + err.Error())
+		return nil, errors.New("Error reading the csv report columns: " + err.Error()), nil, nil
 	}
 
 	// Getting list of columns
 	cols := strings.Split(strings.Replace(string(line), "\"", "", -1), ",")
-
+	rows := [][]string{}
 	// Reading other csv lines and storing metrics on a map
 	report := []*ReportRecord{}
 	csvLines, _ := csv.NewReader(br).ReadAll()
 	for _, line := range csvLines {
+		row := []string{}
 		newRecord := &ReportRecord{
 			Record: map[string]string{},
 		}
 		for j, metric := range line {
 			newRecord.Record[cols[j]] = metric
+			row = append(row, metric)
 		}
 		report = append(report, newRecord)
+		rows = append(rows, row)
 	}
 
-	return report, nil
+	return report, nil, cols, rows
 }
